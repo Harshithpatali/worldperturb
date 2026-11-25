@@ -54,7 +54,11 @@ def build_benchmark_report(actual: pd.Series, predictions: dict[str, pd.Series],
         value.rename(f"prediction:{name}") for name, value in predictions.items()
     ], axis=1)
     fingerprint = sha256(pd.util.hash_pandas_object(payload, index=True).values.tobytes()).hexdigest()
-    metrics = scores.reset_index().replace({np.nan: None}).to_dict(orient="records")
+    metrics = scores.reset_index().to_dict(orient="records")
+    metrics = [
+        {key: (None if pd.isna(value) else value) for key, value in row.items()}
+        for row in metrics
+    ]
     return {
         "report_version": 1, "dataset": dataset_name, "seed": int(seed),
         "data_fingerprint": fingerprint, "metadata": metadata or {},
