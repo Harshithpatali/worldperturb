@@ -1,15 +1,13 @@
-"""Scenario and deterministic perturbation specifications."""
-
+"""Scenario and deterministic/stochastic perturbation specifications."""
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any, Literal
+from .stochastic import CorrelatedShock, Distribution, StochasticPerturbation
 
 
 @dataclass(frozen=True)
 class Perturbation:
     """One ordered transformation of a dataframe column."""
-
     column: str
     operation: Literal["scale", "add", "set", "clip"]
     value: Any = None
@@ -27,11 +25,11 @@ class Perturbation:
 
 @dataclass
 class Scenario:
-    """A named list of ordered perturbations."""
-
+    """A named list of ordered deterministic and stochastic interventions."""
     name: str
     perturbations: list[Perturbation] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    stochastic_perturbations: list[StochasticPerturbation | CorrelatedShock] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -51,4 +49,13 @@ class Scenario:
 
     def clip(self, column: str, lower: float | None = None, upper: float | None = None) -> "Scenario":
         self.perturbations.append(Perturbation(column, "clip", lower=lower, upper=upper))
+        return self
+
+    def sample(self, column: str, distribution: Distribution, operation: str = "add") -> "Scenario":
+        self.stochastic_perturbations.append(StochasticPerturbation(column, distribution, operation))
+        return self
+
+    def correlated_shock(self, columns: tuple[str, ...], mean: tuple[float, ...],
+                         covariance: tuple[tuple[float, ...], ...]) -> "Scenario":
+        self.stochastic_perturbations.append(CorrelatedShock(columns, mean, covariance))
         return self
