@@ -64,6 +64,31 @@ class ExperimentResult:
         ]).set_index("scenario")
 
 
+@dataclass
+class PairedMonteCarloResult:
+    """Replication-aligned outcomes from scenarios using common random seeds."""
+    samples: pd.DataFrame
+    seed: int
+
+    def compare(self, reference: str, candidate: str, *, confidence_level: float = 0.95,
+                bootstrap_samples: int = 2000) -> dict[str, Any]:
+        from .statistics import bootstrap_paired_difference
+        if reference not in self.samples or candidate not in self.samples:
+            raise KeyError("Both scenario names must exist in paired samples.")
+        interval = bootstrap_paired_difference(
+            self.samples[reference], self.samples[candidate],
+            confidence_level=confidence_level, samples=bootstrap_samples, seed=self.seed,
+        )
+        return {
+            "reference": reference, "candidate": candidate,
+            "mean_difference": interval.estimate, "ci_lower": interval.lower,
+            "ci_upper": interval.upper, "confidence_level": confidence_level,
+            "probability_candidate_better": float(
+                (self.samples[candidate] > self.samples[reference]).mean()
+            ),
+        }
+
+
 class World:
     """A dataframe-backed world with constraints and reproducible interventions."""
     def __init__(self, data: pd.DataFrame, *, variables: dict[str, dict[str, Any]] | None = None,
@@ -154,6 +179,35 @@ class World:
             row["replication"] = replication
             rows.append(row)
         return MonteCarloResult(pd.DataFrame(rows).set_index("replication"), seed, scenario.name)
+
+    def paired_monte_carlo(self, *, scenarios: list[Scenario], metric: str,
+                           repetitions: int = 100, seed: int = 0,
+                           aggregation: str = "mean") -> PairedMonteCarloResult:
+        """Compare scenarios with common replication seeds (paired random numbers)."""
+        allowed = {"mean", "sum", "median"}
+        if aggregation not in allowed:
+            raise ValueError(f"aggregation must be one of {sorted(allowed)}")
+        if repetitions < 2:
+            raise ValueError("repetitions must be at least 2.")
+        names = ["baseline"] + [scenario.name for scenario in scenarios]
+        if len(names) != len(set(names)):
+            raise ValueError("Scenario names must be unique and cannot be 'baseline'.")
+        rows = []
+        for replication in range(repetitions):
+            run_seed = seed + replication
+            row = {}
+            baseline = self.run(seed=run_seed).data
+            if metric not in baseline:
+                raise KeyError(f"Metric {metric!r} not found.")
+            row["baseline"] = float(getattr(baseline[metric], aggregation)())
+            for scenario in scenarios:
+                frame = self.run(scenario, seed=run_seed).data
+                if metric not in frame:
+                    raise KeyError(f"Metric {metric!r} not found in {scenario.name!r}.")
+                row[scenario.name] = float(getattr(frame[metric], aggregation)())
+            row["replication"] = replication
+            rows.append(row)
+        return PairedMonteCarloResult(pd.DataFrame(rows).set_index("replication"), seed)
 
     def experiment(self, *, scenarios: list[Scenario], repetitions: int = 1,
                    seed: int = 0) -> ExperimentResult:
