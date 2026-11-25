@@ -1,10 +1,8 @@
 # WorldPerturb
 
-**Constraint-aware scenario engineering and reproducible what-if experiments.**
+**Constraint-aware simulation, stochastic scenario engineering and reproducible experiments.**
 
-WorldPerturb is an early-stage Python framework for defining, validating, executing and comparing controlled changes to tabular systems.
-
-> **Status:** v0.1.0 foundation. The current release provides deterministic dataframe perturbations and row-wise constraints. Hybrid simulation adapters, causal mechanisms, stochastic replications and scenario compilation are planned; they are not yet implemented.
+WorldPerturb is a Python framework for modelling tabular systems, simulating entity state transitions, applying deterministic or stochastic interventions, validating invariants and benchmarking outcomes.
 
 ## Installation
 
@@ -12,49 +10,60 @@ WorldPerturb is an early-stage Python framework for defining, validating, execut
 pip install worldperturb
 ```
 
-## Quick start
+## Scenario experiments
 
 ```python
 import pandas as pd
-from worldperturb import Constraint, World
+from worldperturb import Constraint, Distribution, World
 
-df = pd.DataFrame({"price": [500.0, 450.0], "demand": [100.0, 120.0]})
-world = World.from_dataframe(df, constraints=[Constraint("positive_demand", "demand >= 0")])
-scenario = world.scenario("price_increase").scale("price", 1.10)
-result = world.experiment(scenarios=[scenario])
-print(result.compare("price"))
+world = World(pd.DataFrame({"price": [500.0, 450.0], "demand": [100.0, 120.0]}),
+              constraints=[Constraint("nonnegative_demand", "demand >= 0")])
+scenario = world.scenario("uncertain_price")
+scenario.sample("price", Distribution.normal(mean=10, sd=3))
+result = world.monte_carlo(scenario, repetitions=500, seed=42)
+print(result.summary("price"))
 ```
 
-## v0.1 capabilities
+## Entity simulation
 
-- Defensive copying of baseline data.
-- Deterministic scale, add, set and clip operators.
-- Ordered named scenarios.
-- Row-wise dataframe constraint validation.
-- Reproducible dataframe fingerprints.
-- Baseline-versus-scenario aggregate comparison.
+```python
+import pandas as pd
+from worldperturb import SimulationEngine, StateTransition
 
-## Limitations
+entities = pd.DataFrame({"customer_id": [1, 2, 3], "state": ["new"] * 3})
+engine = SimulationEngine(state_column="state", transitions=[
+    StateTransition("new", "active", probability=0.7),
+    StateTransition("active", "churned", probability=0.05),
+])
+result = engine.run(entities, steps=12, seed=42)
+print(result.trajectory)
+```
 
-- Constraints use pandas expressions evaluated row-wise; this is not a general symbolic solver.
-- The current engine is dataframe-backed and deterministic.
-- `repetitions` and `seed` are reserved API parameters; deterministic operators do not use randomness yet.
-- The package does not infer causal effects. A real-world behavioural mechanism must be specified by the user.
-- Hybrid ABM, system-dynamics and discrete-event orchestration are planned, not implemented.
+## Capabilities
+
+- Discrete-time entity simulation with ordered probabilistic state transitions and per-transition updates.
+- Normal, uniform, Bernoulli and Poisson stochastic perturbations.
+- Multivariate normal shocks with validated covariance matrices.
+- Reproducible Monte Carlo replications and percentile summaries.
+- Scenario constraints and invariant validation.
+- One-factor-at-a-time sensitivity analysis.
+- Forecast baseline benchmarking with MAE, RMSE and MAPE.
+- Deterministic dataframe transformations and stable data fingerprints.
+
+## Reproducibility and interpretation
+
+Randomness is controlled by NumPy generators and explicit seeds. A Monte Carlo run derives a distinct deterministic seed per replication. Results quantify outcomes under supplied transition rules and perturbations; they do not establish causal effects by themselves. Users must encode domain mechanisms and validate assumptions.
 
 ## Roadmap
 
-- [x] Initial dataframe-backed scenario API
-- [x] Deterministic perturbations and constraints
-- [x] Baseline comparison
-- [ ] Scenario compiler and dependency graph
-- [ ] Units-aware constraints
-- [ ] Stochastic experiments and paired random streams
-- [ ] Sensitivity and uncertainty analysis
-- [ ] Simulation adapter protocol
-- [ ] Mesa and SimPy integrations
-- [ ] Hybrid orchestration
-- [ ] Scenario integrity benchmark
+- [x] Dataframe-backed deterministic scenarios and constraints
+- [x] Entity state-transition simulation
+- [x] Stochastic and correlated perturbations
+- [x] Monte Carlo and sensitivity analysis
+- [x] Forecast baseline metrics
+- [ ] Simulation adapters (Mesa / SimPy)
+- [ ] Hybrid discrete-event and system-dynamics orchestration
+- [ ] Advanced scenario dependency graphs and units-aware constraints
 
 ## License
 
