@@ -1,0 +1,8 @@
+site_name: WorldPerturb
+site_description: Constraint-aware scenario engineering
+repo_url: https://github.com/Harshithpatali/worldperturb
+theme:
+  name: material
+nav:
+  - Home: docs/index.md
+  - Architecture: docs/architecture.md
